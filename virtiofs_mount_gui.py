@@ -21,11 +21,13 @@ class MountThread(QThread):
             virtiofs_path = r"C:\Program Files\Virtio-Win\VioFS\virtiofs.exe"
             cmd = [virtiofs_path, "-d", f"{self.drive_letter}:", "-t", self.vm_tag]
             
+            # 直接运行，不需要特殊权限处理
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=10,
+                creationflags=subprocess.CREATE_NO_WINDOW  # 不显示命令行窗口
             )
             
             if result.returncode == 0:
@@ -61,7 +63,7 @@ class VirtioFSMountGUI(QMainWindow):
         
     def init_ui(self):
         self.setWindowTitle("VirtioFS Mount Manager")
-        self.setGeometry(300, 300, 500, 600)
+        self.setGeometry(300, 300, 500, 550)
         
         # 中心部件
         central_widget = QWidget()
@@ -76,12 +78,7 @@ class VirtioFSMountGUI(QMainWindow):
         title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
         
-        # 管理员权限提示
-        if not self.is_admin():
-            warning = QLabel("⚠️ Please run this application as Administrator")
-            warning.setStyleSheet("color: red; font-weight: bold;")
-            warning.setAlignment(Qt.AlignCenter)
-            layout.addWidget(warning)
+        # 移除管理员权限警告（不需要了）
         
         # 创建挂载按钮
         for vm_tag in ["vm888", "vm555", "vm666", "vm777"]:
@@ -124,7 +121,9 @@ class VirtioFSMountGUI(QMainWindow):
         layout.addWidget(self.log_text)
         
         self.log("Application started. Ready to mount drives.")
-        
+        if not self.is_admin():
+            self.log("Note: Running without administrator privileges. This is usually fine.", "blue")
+    
     def is_admin(self):
         """检查是否以管理员权限运行"""
         try:
@@ -134,14 +133,6 @@ class VirtioFSMountGUI(QMainWindow):
     
     def mount_drive(self, vm_tag):
         """挂载指定的虚拟机驱动器"""
-        if not self.is_admin():
-            QMessageBox.warning(
-                self,
-                "Administrator Required",
-                "This operation requires administrator privileges.\nPlease restart the application as administrator."
-            )
-            return
-        
         drive_letter = self.mount_configs[vm_tag]
         self.log(f"Starting mount operation for {vm_tag} on {drive_letter}:...")
         
@@ -170,11 +161,45 @@ class VirtioFSMountGUI(QMainWindow):
             QMessageBox.information(self, "Success", message)
         else:
             self.log(f"✗ {message}", "red")
-            QMessageBox.critical(self, "Error", message)
+            # 检查是否是权限问题
+            if "access" in message.lower() or "permission" in message.lower() or "denied" in message.lower():
+                reply = QMessageBox.critical(
+                    self, 
+                    "Permission Error", 
+                    f"{message}\n\nThis might require administrator privileges.\nWould you like to restart this application as administrator?",
+                    QMessageBox.Yes | QMessageBox.No
+                )
+                if reply == QMessageBox.Yes:
+                    self.restart_as_admin()
+            else:
+                QMessageBox.critical(self, "Error", message)
         
         # 清理线程
         if vm_tag in self.mount_threads:
             del self.mount_threads[vm_tag]
+    
+    def restart_as_admin(self):
+        """以管理员权限重启程序"""
+        try:
+            if getattr(sys, 'frozen', False):
+                # 如果是打包的exe
+                exe_path = sys.executable
+            else:
+                # 如果是python脚本
+                exe_path = sys.executable
+                params = ' '.join([f'"{arg}"' for arg in sys.argv])
+            
+            ctypes.windll.shell32.ShellExecuteW(
+                None, 
+                "runas",  # 以管理员身份运行
+                exe_path, 
+                params if not getattr(sys, 'frozen', False) else "",
+                None, 
+                1  # SW_SHOWNORMAL
+            )
+            QApplication.quit()
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to restart as administrator: {str(e)}")
     
     def log(self, message, color="black"):
         """添加日志消息"""
