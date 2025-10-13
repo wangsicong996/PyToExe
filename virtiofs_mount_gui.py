@@ -9,7 +9,7 @@ from PyQt5.QtGui import QFont
 
 class MountThread(QThread):
     """后台线程执行挂载操作"""
-    finished = pyqtSignal(bool, str, str)  # 成功/失败, VM名称, 消息
+    finished = pyqtSignal(bool, str, str, object)  # 成功/失败, VM名称, 消息, 进程对象
     
     def __init__(self, drive_letter, vm_tag):
         super().__init__()
@@ -21,29 +21,37 @@ class MountThread(QThread):
             virtiofs_path = r"C:\Program Files\Virtio-Win\VioFS\virtiofs.exe"
             cmd = [virtiofs_path, "-d", f"{self.drive_letter}:", "-t", self.vm_tag]
             
-            # 直接运行，不需要特殊权限处理
-            result = subprocess.run(
+            # 启动virtiofs进程，让它持续运行
+            process = subprocess.Popen(
                 cmd,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
-                timeout=10,
                 creationflags=subprocess.CREATE_NO_WINDOW  # 不显示命令行窗口
             )
             
-            if result.returncode == 0:
+            # 等待一小段时间，检查进程是否启动成功
+            import time
+            time.sleep(2)
+            
+            # 检查进程是否还在运行
+            if process.poll() is None:
+                # 进程还在运行，说明挂载成功
                 self.finished.emit(True, self.vm_tag, 
-                                 f"Successfully mounted {self.drive_letter}: to {self.vm_tag}")
+                                 f"Successfully mounted {self.drive_letter}: to {self.vm_tag}\nThe mount will remain active while this application is running.",
+                                 process)
             else:
-                error_msg = result.stderr if result.stderr else result.stdout
+                # 进程已退出，说明失败
+                stdout, stderr = process.communicate()
+                error_msg = stderr if stderr else stdout
                 self.finished.emit(False, self.vm_tag, 
-                                 f"Failed to mount {self.drive_letter}: to {self.vm_tag}\n{error_msg}")
+                                 f"Failed to mount {self.drive_letter}: to {self.vm_tag}\n{error_msg}",
+                                 None)
         
-        except subprocess.TimeoutExpired:
-            self.finished.emit(False, self.vm_tag, f"Mount operation timed out for {self.vm_tag}")
         except FileNotFoundError:
-            self.finished.emit(False, self.vm_tag, "virtiofs.exe not found. Please check installation path.")
+            self.finished.emit(False, self.vm_tag, "virtiofs.exe not found. Please check installation path.", None)
         except Exception as e:
-            self.finished.emit(False, self.vm_tag, f"Error: {str(e)}")
+            self.finished.emit(False, self.vm_tag, f"Error: {str(e)}", None)
 
 
 class VirtioFSMountGUI(QMainWindow):
@@ -59,6 +67,7 @@ class VirtioFSMountGUI(QMainWindow):
         }
         
         self.mount_threads = {}
+        self.mount_processes = {}  # 保存挂载进程，防止被终止
         self.init_ui()
         
     def init_ui(self):
@@ -147,19 +156,37 @@ class VirtioFSMountGUI(QMainWindow):
         self.mount_threads[vm_tag] = thread
         thread.start()
     
-    def on_mount_finished(self, success, vm_tag, message):
+    def on_mount_finished(self, success, vm_tag, message, process):
         """挂载操作完成回调"""
         # 恢复按钮
         btn = getattr(self, f"btn_{vm_tag}")
         btn.setEnabled(True)
         drive_letter = self.mount_configs[vm_tag]
-        btn.setText(f"Mount {vm_tag} ({drive_letter}:)")
         
         # 记录日志
         if success:
+            # 保存进程引用，防止进程被垃圾回收终止
+            self.mount_processes[vm_tag] = process
+            
+            # 修改按钮文字和颜色，表示已挂载
+            btn.setText(f"✓ {vm_tag} Mounted ({drive_letter}:)")
+            btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #2196F3;
+                    color: white;
+                    border-radius: 5px;
+                    padding: 10px;
+                }
+                QPushButton:hover {
+                    background-color: #1976D2;
+                }
+            """)
+            
             self.log(f"✓ {message}", "green")
-            QMessageBox.information(self, "Success", message)
+            QMessageBox.information(self, "Success", 
+                                  f"{message}\n\nKeep this application running to maintain the mount.")
         else:
+            btn.setText(f"Mount {vm_tag} ({drive_letter}:)")
             self.log(f"✗ {message}", "red")
             # 检查是否是权限问题
             if "access" in message.lower() or "permission" in message.lower() or "denied" in message.lower():
@@ -214,6 +241,31 @@ class VirtioFSMountGUI(QMainWindow):
         self.log_text.verticalScrollBar().setValue(
             self.log_text.verticalScrollBar().maximum()
         )
+    
+    def closeEvent(self, event):
+        """程序关闭时清理所有挂载进程"""
+        if self.mount_processes:
+            reply = QMessageBox.question(
+                self,
+                "Confirm Exit",
+                f"There are {len(self.mount_processes)} active mount(s).\nClosing this application will unmount all drives.\n\nAre you sure you want to exit?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            
+            if reply == QMessageBox.Yes:
+                # 终止所有挂载进程
+                for vm_tag, process in self.mount_processes.items():
+                    try:
+                        process.terminate()
+                        self.log(f"Unmounted {vm_tag}", "blue")
+                    except:
+                        pass
+                event.accept()
+            else:
+                event.ignore()
+        else:
+            event.accept()
 
 
 def main():
