@@ -1,90 +1,81 @@
-name: Build Python to EXE
+name: Build VirtioFS Mount GUI to EXE
 
 on:
   push:
     branches:
       - main
     paths:
-      - '**.py'  # Only trigger on Python file changes
-  pull_request:
-    branches:
-      - main
-    paths:
-      - '**.py'  # Only trigger on Python file changes
+      - 'virtiofs_mount_gui.py'  # 只在这个文件改变时触发
   workflow_dispatch:
     inputs:
       branchRef:
         description: 'Branch to deploy'
         required: true
         default: 'main'
-      specificFile:
-        description: 'Specific Python file to build (leave empty for auto-detect)'
-        required: false
-
-# Removed concurrency configuration to allow parallel execution
 
 jobs:
   build:
     runs-on: windows-latest
     permissions:
-      contents: write  # This is needed to push changes to the repository
+      contents: write
 
     steps:
-    # Langkah 1: Checkout kode with full history
+    # 1. Checkout代码
     - name: Checkout code
       uses: actions/checkout@v4
       with:
-        token: ${{ secrets.GITHUB_TOKEN }}  # This is needed for pushing changes
-        fetch-depth: 0  # Fetch all history to get commit information
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0
 
-    # Langkah 2: Create requirements.txt first
+    # 2. 创建requirements.txt，包含PyQt5和PyInstaller
     - name: Create requirements.txt
       run: |
-        echo "pyinstaller" > requirements.txt
+        echo "pyinstaller==6.3.0" > requirements.txt
+        echo "PyQt5==5.15.10" >> requirements.txt
         echo "chardet" >> requirements.txt
       shell: powershell
 
-    # Langkah 3: Setup Python - explicitly specify 3.10.x
+    # 3. 设置Python 3.10
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.10'
 
-    # Langkah 4: Verify Python version
+    # 4. 验证Python版本
     - name: Verify Python version
       run: |
         python --version
         pip --version
       shell: powershell
 
-    # Langkah 5: Cache pip packages
+    # 5. 缓存pip包
     - name: Cache pip packages
       uses: actions/cache@v3
       with:
         path: ~\AppData\Local\pip\Cache
-        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+        key: ${{ runner.os }}-pip-pyqt5-${{ hashFiles('requirements.txt') }}
         restore-keys: |
-          ${{ runner.os }}-pip-
+          ${{ runner.os }}-pip-pyqt5-
 
-    # Langkah 6: Install dependencies directly (no venv)
+    # 6. 安装依赖
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
       shell: powershell
 
-    # Langkah 7: Cache PyInstaller build files
+    # 7. 缓存PyInstaller构建文件
     - name: Cache PyInstaller build files
       uses: actions/cache@v3
       with:
         path: |
           build
-          spec
-        key: ${{ runner.os }}-pyinstaller-${{ hashFiles('**/*.py') }}
+          dist
+        key: ${{ runner.os }}-pyinstaller-pyqt5-${{ hashFiles('virtiofs_mount_gui.py') }}
         restore-keys: |
-          ${{ runner.os }}-pyinstaller-
+          ${{ runner.os }}-pyinstaller-pyqt5-
 
-    # Langkah 8: Set PowerShell to use UTF-8
+    # 8. 设置PowerShell使用UTF-8
     - name: Configure PowerShell encoding
       run: |
         [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -92,140 +83,56 @@ jobs:
         $PSDefaultParameterValues['*:Encoding'] = 'utf8'
       shell: powershell
 
-    # Langkah 9: Find the Python file that triggered the action
-    - name: Find the Python file that triggered the action
-      id: find_python_file
-      run: |
-        # Check if a specific file was provided in workflow_dispatch
-        $specific_file = "${{ github.event.inputs.specificFile }}"
-        
-        if ($specific_file) {
-          echo "Using specified Python file: $specific_file"
-          $script_path = (Get-Location).Path + "\" + $specific_file.Replace("/", "\")
-          
-          if (-not (Test-Path $script_path)) {
-            echo "Warning: Specified file not found: $script_path"
-            echo "Will try to find the file that triggered the action instead."
-            $specific_file = ""
-          }
-        }
-        
-        if (-not $specific_file) {
-          # For push events, get the files changed in the last commit
-          if ("${{ github.event_name }}" -eq "push") {
-            echo "Finding Python files changed in the last commit..."
-            
-            # Get the files changed in the last commit
-            $changed_files = git diff-tree --no-commit-id --name-only -r ${{ github.sha }} | Where-Object { $_ -match '\.py$' }
-            
-            if ($changed_files) {
-              # If multiple Python files were changed, use the first one
-              $python_file = $changed_files | Select-Object -First 1
-              echo "Python file changed in commit: $python_file"
-              $script_path = (Get-Location).Path + "\" + $python_file.Replace("/", "\")
-            } else {
-              echo "No Python files found in the commit, falling back to most recent file..."
-            }
-          }
-          
-          # If no file was found from the commit or it's not a push event, fall back to the most recent file
-          if (-not $script_path -or -not (Test-Path $script_path)) {
-            echo "Finding most recent Python file..."
-            $python_files = Get-ChildItem -Recurse -Filter "*.py" | Sort-Object LastWriteTime -Descending
-            
-            if ($python_files.Count -eq 0) {
-              echo "No Python files found in the repository!"
-              echo "Creating a sample Python file for testing..."
-              echo "print('Hello, World!')" > sample.py
-              $script_path = "sample.py"
-            } else {
-              $latest_file = $python_files | Select-Object -First 1
-              $script_path = $latest_file.FullName
-              echo "Using most recent Python file: $script_path"
-            }
-          }
-        }
-        
-        # Save the path to a file to avoid encoding issues when passing between steps
-        $script_path | Out-File -FilePath "script_path.txt" -Encoding utf8
-        echo "script_file=script_path.txt" >> $env:GITHUB_OUTPUT
-        
-        # Save the relative path for Git operations
-        $repo_root = (Get-Location).Path
-        $relative_path = $script_path.Replace("$repo_root\", "").Replace("\", "/")
-        $relative_path | Out-File -FilePath "relative_path.txt" -Encoding utf8
-        echo "relative_path=relative_path.txt" >> $env:GITHUB_OUTPUT
-      shell: powershell
-
-    # Langkah 10: Check and fix file encoding with improved error handling
+    # 9. 检查并修复文件编码
     - name: Check and fix file encoding
       run: |
-        # Read the script path from the file
-        $script_path = Get-Content -Path "${{ steps.find_python_file.outputs.script_file }}" -Encoding utf8
+        $script_path = "virtiofs_mount_gui.py"
         
         echo "Checking encoding of Python script: $script_path"
         
-        # Create a Python script to detect and fix encoding with better error handling
+        # 创建编码修复脚本
         $encoding_script = @"
         import sys
         import os
         import chardet
         
         def fix_encoding(file_path):
-            # Read the file as binary
             with open(file_path, 'rb') as file:
                 raw_data = file.read()
             
-            # Try to detect the encoding
             result = chardet.detect(raw_data)
             encoding = result['encoding']
             confidence = result['confidence']
             
             print(f"Detected encoding: {encoding} with confidence: {confidence}")
             
-            # List of encodings to try, in order of preference
-            # Start with the detected encoding if confidence is high enough
             encodings_to_try = []
-            
-            # Only use detected encoding if confidence is reasonable
             if encoding and confidence > 0.5:
                 encodings_to_try.append(encoding)
             
-            # Add common encodings as fallbacks
-            for enc in ['utf-8', 'utf-16', 'utf-32', 'gbk', 'gb2312', 'big5', 
-                        'shift_jis', 'euc-jp', 'euc-kr', 'iso-8859-1', 
-                        'windows-1252', 'latin-1', 'cp1251']:
-                if enc.lower() != encoding.lower():
+            for enc in ['utf-8', 'utf-16', 'gbk', 'gb2312', 'windows-1252', 'latin-1']:
+                if enc.lower() != encoding.lower() if encoding else True:
                     encodings_to_try.append(enc)
             
-            # Try to decode with each encoding
             content = None
-            used_encoding = None
-            
             for enc in encodings_to_try:
                 try:
                     content = raw_data.decode(enc)
-                    used_encoding = enc
                     print(f"Successfully decoded with {enc}")
                     break
                 except UnicodeDecodeError:
-                    print(f"Failed to decode with {enc}")
                     continue
             
             if content is None:
-                print("Could not decode the file with any encoding. Using UTF-8 and ignoring errors.")
                 content = raw_data.decode('utf-8', errors='ignore')
-                used_encoding = 'utf-8'
             
-            # Check if the file already has an encoding declaration
             lines = content.split('\n')
             has_encoding = False
-            for i, line in enumerate(lines[:2]):
-                if 'coding' in line and ('utf-8' in line.lower() or 'utf8' in line.lower()):
+            for line in lines[:2]:
+                if 'coding' in line and 'utf-8' in line.lower():
                     has_encoding = True
                     break
             
-            # Add encoding declaration if it doesn't have one
             if not has_encoding:
                 if lines[0].startswith('#!'):
                     lines.insert(1, '# -*- coding: utf-8 -*-')
@@ -233,104 +140,59 @@ jobs:
                     lines.insert(0, '# -*- coding: utf-8 -*-')
                 content = '\n'.join(lines)
             
-            # Write back with UTF-8 encoding
             with open(file_path, 'w', encoding='utf-8') as file:
                 file.write(content)
             
-            print(f"File saved with UTF-8 encoding and proper declaration")
+            print("File saved with UTF-8 encoding")
         
         if __name__ == '__main__':
-            if len(sys.argv) > 1:
-                file_path = sys.argv[1]
-                if os.path.exists(file_path):
-                    try:
-                        fix_encoding(file_path)
-                    except Exception as e:
-                        print(f"Error processing file: {e}")
-                        # Create a simple backup by copying the file
-                        import shutil
-                        backup_path = file_path + '.bak'
-                        shutil.copy2(file_path, backup_path)
-                        print(f"Created backup at {backup_path}")
-                        
-                        # Create a simple version with just the encoding declaration
-                        with open(file_path, 'w', encoding='utf-8') as f:
-                            f.write('# -*- coding: utf-8 -*-\\n\\n')
-                            f.write('print("Hello World!")\\n')
-                        print("Created a simple replacement file with UTF-8 encoding")
-                else:
-                    print(f"File not found: {file_path}")
-            else:
-                print("No file path provided")
+            file_path = sys.argv[1] if len(sys.argv) > 1 else None
+            if file_path and os.path.exists(file_path):
+                fix_encoding(file_path)
         "@
         
-        # Save the encoding script
         $encoding_script | Out-File -FilePath "fix_encoding.py" -Encoding utf8
-        
-        # Run the encoding script on the Python file
         python fix_encoding.py "$script_path"
       shell: powershell
 
-    # Langkah 11: Build EXE dengan PyInstaller
-    - name: Build EXE
-      id: build_exe
+    # 10. 创建PyInstaller spec文件
+    - name: Create PyInstaller spec file
       run: |
-        # Read the script path from the file
-        $script_path = Get-Content -Path "${{ steps.find_python_file.outputs.script_file }}" -Encoding utf8
-        
-        if (-not $script_path) {
-          echo "Error: Script path is empty!"
-          exit 1
-        }
-        
-        echo "Building EXE for script: $script_path"
-        
-        # Get the directory of the script
-        $output_dir = Split-Path -Path $script_path
-        
-        if (-not $output_dir) {
-          echo "Using current directory as output directory"
-          $output_dir = "."
-        }
-        
-        echo "Output directory: $output_dir"
-        
-        # Extract the file name without extension for the EXE name
-        $file_name = Split-Path -Leaf $script_path
-        $exe_name = $file_name -replace '\.py$', ''
-        
-        echo "EXE name will be: $exe_name"
-        
-        # Create a custom PyInstaller spec file to handle encoding issues
         $spec_content = @"
         # -*- coding: utf-8 -*-
         import sys
-        from PyInstaller.building.api import PYZ, EXE, COLLECT
+        from PyInstaller.building.api import PYZ, EXE
         from PyInstaller.building.build_main import Analysis
         
-        # Set the correct encoding for sys.stdout and sys.stderr
+        # 设置正确的编码
         if hasattr(sys.stdout, 'reconfigure'):
             sys.stdout.reconfigure(encoding='utf-8')
         if hasattr(sys.stderr, 'reconfigure'):
             sys.stderr.reconfigure(encoding='utf-8')
         
+        block_cipher = None
+        
         a = Analysis(
-            ['$($script_path -replace '\\', '\\\\')'],
+            ['virtiofs_mount_gui.py'],
             pathex=[],
             binaries=[],
             datas=[],
-            hiddenimports=[],
+            hiddenimports=[
+                'PyQt5.QtCore',
+                'PyQt5.QtGui',
+                'PyQt5.QtWidgets',
+            ],
             hookspath=[],
             hooksconfig={},
             runtime_hooks=[],
             excludes=[],
             win_no_prefer_redirects=False,
             win_private_assemblies=False,
-            cipher=None,
+            cipher=block_cipher,
             noarchive=False,
         )
         
-        pyz = PYZ(a.pure, a.zipped_data, cipher=None)
+        pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
         
         exe = EXE(
             pyz,
@@ -339,175 +201,141 @@ jobs:
             a.zipfiles,
             a.datas,
             [],
-            name='$exe_name',
+            name='VirtioFS_Mount_Manager',
             debug=False,
             bootloader_ignore_signals=False,
             strip=False,
             upx=True,
             upx_exclude=[],
             runtime_tmpdir=None,
-            console=True,
+            console=False,  # 设置为False可以隐藏控制台窗口
             disable_windowed_traceback=False,
             argv_emulation=False,
             target_arch=None,
             codesign_identity=None,
             entitlements_file=None,
+            icon=None,  # 如果有icon文件，可以在这里指定
         )
         "@
         
-        # Save the spec file
-        $spec_content | Out-File -FilePath "custom_build.spec" -Encoding utf8
-        
-        # Build using the custom spec file
-        pyinstaller --clean --log-level DEBUG custom_build.spec
-        
-        # Check if the build was successful by looking for the EXE
-        $exe_path = "dist/$exe_name.exe"
-        $build_success = Test-Path $exe_path
-        
-        # Save build status for later steps
-        $build_success | Out-File -FilePath "build_success.txt" -Encoding utf8
-        echo "build_success=build_success.txt" >> $env:GITHUB_OUTPUT
+        $spec_content | Out-File -FilePath "virtiofs_mount_gui.spec" -Encoding utf8
       shell: powershell
-      continue-on-error: true  # Continue even if the build fails
 
-    # Langkah 12: Delete the Python file locally
-    - name: Delete Python file locally
-      if: always()  # This ensures the step runs even if previous steps failed
+    # 11. 使用PyInstaller构建EXE（单文件模式，包含所有依赖）
+    - name: Build EXE with PyInstaller
       run: |
-        # Read the script path from the file
-        $script_path = Get-Content -Path "${{ steps.find_python_file.outputs.script_file }}" -Encoding utf8
+        echo "Building EXE with all dependencies included..."
         
-        if (-not $script_path) {
-          echo "Error: Script path is empty, cannot delete file."
-          exit 0  # Don't fail the workflow if we can't delete
+        # 使用spec文件构建
+        pyinstaller --clean --log-level INFO virtiofs_mount_gui.spec
+        
+        # 检查构建是否成功
+        if (Test-Path "dist/VirtioFS_Mount_Manager.exe") {
+          echo "Build successful!"
+          $exe_size = (Get-Item "dist/VirtioFS_Mount_Manager.exe").Length / 1MB
+          echo "EXE size: $([math]::Round($exe_size, 2)) MB"
+        } else {
+          echo "Build failed - EXE not found!"
+          exit 1
         }
+      shell: powershell
+
+    # 12. 创建发布信息
+    - name: Create release info
+      run: |
+        $info = @"
+        VirtioFS Mount Manager - Release Information
+        ============================================
         
-        echo "Attempting to delete Python file locally: $script_path"
+        Build Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+        Python Version: $(python --version)
+        PyQt5 Version: $(pip show PyQt5 | Select-String "Version")
+        PyInstaller Version: $(pip show pyinstaller | Select-String "Version")
         
-        # Create a Python script to handle file deletion (better with non-ASCII paths)
-        $delete_script = @"
-        import os
-        import sys
-        import shutil
+        File Information:
+        - Executable: VirtioFS_Mount_Manager.exe
+        - Type: Single file executable with all dependencies included
+        - No installation required
         
-        def delete_file(file_path):
-            try:
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-                    print(f"Successfully deleted locally: {file_path}")
-                else:
-                    print(f"File not found: {file_path}")
-                
-                # Check for backup file
-                backup_path = file_path + '.bak'
-                if os.path.exists(backup_path):
-                    os.remove(backup_path)
-                    print(f"Successfully deleted backup: {backup_path}")
-            except Exception as e:
-                print(f"Error deleting file: {e}")
-                
-                # Try alternative method if first one fails
-                try:
-                    if os.path.exists(file_path):
-                        # Sometimes direct deletion fails with special characters
-                        # Try to rename first to a simple name
-                        temp_path = os.path.join(os.path.dirname(file_path), "temp_to_delete.py")
-                        shutil.move(file_path, temp_path)
-                        os.remove(temp_path)
-                        print(f"Successfully deleted via rename method: {file_path}")
-                except Exception as e2:
-                    print(f"Alternative deletion also failed: {e2}")
+        Supported VMs:
+        - vm888 (X:)
+        - vm555 (Y:)
+        - vm666 (J:)
+        - vm777 (K:)
         
-        if __name__ == "__main__":
-            if len(sys.argv) > 1:
-                file_path = sys.argv[1]
-                delete_file(file_path)
-            else:
-                print("No file path provided")
+        Requirements:
+        - Windows OS
+        - Administrator privileges
+        - VirtioFS installed at: C:\Program Files\Virtio-Win\VioFS\virtiofs.exe
+        
+        How to Use:
+        1. Run the executable as Administrator
+        2. Click the corresponding button to mount a VM
+        3. Check the log for operation status
         "@
         
-        # Save the deletion script
-        $delete_script | Out-File -FilePath "delete_file.py" -Encoding utf8
-        
-        # Run the deletion script
-        python delete_file.py "$script_path"
+        $info | Out-File -FilePath "dist/README.txt" -Encoding utf8
+        echo "Release info created"
       shell: powershell
 
-    # Langkah 13: Configure Git
-    - name: Configure Git
-      if: always()  # This ensures the step runs even if previous steps failed
-      run: |
-        git config --global user.name "GitHub Actions"
-        git config --global user.email "actions@github.com"
-      shell: powershell
-
-    # Langkah 14: Commit and push the deletion with enhanced conflict resolution
-    - name: Commit and push deletion
-      if: always()  # This ensures the step runs even if previous steps failed
-      run: |
-        # Read the relative path from the file
-        $relative_path = Get-Content -Path "${{ steps.find_python_file.outputs.relative_path }}" -Encoding utf8
-        
-        if (-not $relative_path) {
-          echo "Error: Relative path is empty, cannot commit deletion."
-          exit 0  # Don't fail the workflow if we can't commit
-        }
-        
-        echo "Committing deletion of: $relative_path"
-        
-        # Pull the latest changes first to avoid conflicts
-        git pull origin ${{ github.ref_name }}
-        
-        # Check if the file exists in Git
-        $file_exists = git ls-files --error-unmatch $relative_path 2>$null
-        if ($LASTEXITCODE -eq 0) {
-          # File exists in Git, remove it
-          git rm -f "$relative_path"
-          git commit -m "Remove Python source file after building EXE: $relative_path"
-          
-          # Push with retries to handle potential race conditions
-          $max_retries = 5  # Increased from 3 to 5 for better handling of concurrent actions
-          $retry_count = 0
-          $push_success = $false
-          
-          while (-not $push_success -and $retry_count -lt $max_retries) {
-            try {
-              # Pull again before pushing to get any changes that might have happened
-              git pull --rebase origin ${{ github.ref_name }}
-              git push
-              $push_success = $true
-              echo "Successfully committed and pushed deletion of $relative_path"
-            } catch {
-              $retry_count++
-              echo "Push failed, retrying ($retry_count/$max_retries)..."
-              # Exponential backoff: wait longer between retries
-              Start-Sleep -Seconds (5 * $retry_count)
-            }
-          }
-          
-          if (-not $push_success) {
-            echo "Failed to push changes after $max_retries attempts."
-            exit 1
-          }
-        } else {
-          echo "File $relative_path is not tracked by Git, no need to commit deletion."
-        }
-      shell: powershell
-
-    # Langkah 15: Upload EXE as artifact
+    # 13. 上传EXE作为artifact
     - name: Upload EXE as artifact
-      if: always()  # This ensures the step runs even if previous steps failed
       uses: actions/upload-artifact@v4
       with:
-        name: exe-file
+        name: VirtioFS-Mount-Manager
         path: |
-          **/*.exe
+          dist/VirtioFS_Mount_Manager.exe
+          dist/README.txt
+        retention-days: 90
 
-    # Langkah 16: Post message with download link
+    # 14. 创建GitHub Release（可选）
+    - name: Create Release
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: v1.0.${{ github.run_number }}
+        name: VirtioFS Mount Manager v1.0.${{ github.run_number }}
+        body: |
+          ## VirtioFS Mount Manager
+          
+          自动构建的独立可执行文件，包含所有依赖。
+          
+          ### 功能特性
+          - 一键挂载多个VirtioFS驱动器
+          - 图形化界面，易于使用
+          - 管理员权限自动检测
+          - 实时操作日志显示
+          
+          ### 使用方法
+          1. 下载 `VirtioFS_Mount_Manager.exe`
+          2. 右键选择"以管理员身份运行"
+          3. 点击对应按钮挂载虚拟机
+          
+          ### 系统要求
+          - Windows 操作系统
+          - 已安装 VirtioFS 驱动
+          
+          构建时间: ${{ github.event.head_commit.timestamp }}
+        files: |
+          dist/VirtioFS_Mount_Manager.exe
+          dist/README.txt
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    # 15. 显示下载链接
     - name: Post download link
-      if: always()  # This ensures the step runs even if previous steps failed
       run: |
-        echo "Your file has been uploaded as an artifact."
-        echo "You can download it from: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-
+        echo "=========================================="
+        echo "Build completed successfully!"
+        echo "=========================================="
+        echo ""
+        echo "Download your EXE from:"
+        echo "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        echo ""
+        echo "Or check the latest release at:"
+        echo "https://github.com/${{ github.repository }}/releases/latest"
+        echo ""
+        echo "=========================================="
+      shell: powershell
