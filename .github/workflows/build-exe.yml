@@ -160,7 +160,7 @@ jobs:
         $spec_content = @"
         # -*- coding: utf-8 -*-
         import sys
-        from PyInstaller.building.api import PYZ, EXE, COLLECT
+        from PyInstaller.building.api import PYZ, EXE
         from PyInstaller.building.build_main import Analysis
         
         if hasattr(sys.stdout, 'reconfigure'):
@@ -176,7 +176,6 @@ jobs:
             binaries=[],
             datas=[],
             hiddenimports=[
-                'PyQt5',
                 'PyQt5.QtCore',
                 'PyQt5.QtGui',
                 'PyQt5.QtWidgets',
@@ -196,13 +195,17 @@ jobs:
         exe = EXE(
             pyz,
             a.scripts,
+            a.binaries,
+            a.zipfiles,
+            a.datas,
             [],
-            exclude_binaries=True,
             name='WindowsCmdLauncher',
             debug=False,
             bootloader_ignore_signals=False,
             strip=False,
             upx=True,
+            upx_exclude=[],
+            runtime_tmpdir=None,
             console=False,
             disable_windowed_traceback=False,
             argv_emulation=False,
@@ -210,17 +213,6 @@ jobs:
             codesign_identity=None,
             entitlements_file=None,
             icon=None,
-        )
-        
-        coll = COLLECT(
-            exe,
-            a.binaries,
-            a.zipfiles,
-            a.datas,
-            strip=False,
-            upx=True,
-            upx_exclude=[],
-            name='WindowsCmdLauncher',
         )
         "@
         
@@ -262,10 +254,10 @@ jobs:
         PyInstaller Version: $(pip show pyinstaller | Select-String "Version")
         
         File Information:
-        - Executable: WindowsCmdLauncher.exe (in WindowsCmdLauncher folder)
-        - Type: Folder with all dependencies included
+        - Executable: WindowsCmdLauncher.exe
+        - Type: Single file executable with all dependencies included
         - No installation required
-        - Standalone application with all DLLs
+        - Standalone application
         
         Features:
         - Quick access to Windows management tools
@@ -288,12 +280,10 @@ jobs:
         - Some commands may require elevated permissions
         
         How to Use:
-        1. Run WindowsCmdLauncher.exe (in the WindowsCmdLauncher folder)
+        1. Run WindowsCmdLauncher.exe
         2. Click any button to launch the corresponding Windows tool
         3. Use Settings to customize button appearance
         4. Hover over buttons to see command descriptions
-        
-        Note: Keep all files in the WindowsCmdLauncher folder together!
         
         Customization:
         - Button Width: 80-300px
@@ -312,7 +302,7 @@ jobs:
       with:
         name: Windows-Command-Launcher
         path: |
-          dist/WindowsCmdLauncher/
+          dist/WindowsCmdLauncher.exe
           dist/README.txt
         retention-days: 90
 
@@ -326,7 +316,7 @@ jobs:
         body: |
           ## Windows Command Launcher
           
-          自动构建的应用程序，包含所有依赖（PyQt5及DLL文件）。
+          自动构建的独立可执行文件，包含所有依赖（PyQt5）。
           
           ### 功能特性
           - 🚀 快速启动Windows管理工具
@@ -345,27 +335,23 @@ jobs:
           - **其他工具**: 注册表、任务管理器等
           
           ### 使用方法
-          1. 下载并解压 `Windows-Command-Launcher.zip`
-          2. 进入 `WindowsCmdLauncher` 文件夹
-          3. 双击运行 `WindowsCmdLauncher.exe`
-          4. 点击按钮启动对应工具
-          5. 通过设置自定义界面
+          1. 下载 `WindowsCmdLauncher.exe`
+          2. 双击运行（部分命令可能需要管理员权限）
+          3. 点击按钮启动对应工具
+          4. 通过设置自定义界面
           
           ### 系统要求
           - Windows 10/11
-          - 无需安装Python或PyQt5
-          - 文件夹约 50-80 MB（包含所有DLL）
-          
-          ### 重要说明
-          ⚠️ 请保持 `WindowsCmdLauncher` 文件夹中的所有文件完整，不要单独移动exe文件！
+          - 单文件，无需安装
+          - 约 30-40 MB
           
           构建时间: ${{ github.event.head_commit.timestamp }}
           
           ### 下载说明
-          - **WindowsCmdLauncher文件夹**: 完整应用程序
+          - **WindowsCmdLauncher.exe**: 主程序
           - **README.txt**: 详细说明文档
         files: |
-          dist/WindowsCmdLauncher/**/*
+          dist/WindowsCmdLauncher.exe
           dist/README.txt
         draft: false
         prerelease: false
@@ -385,10 +371,8 @@ jobs:
         echo "Or check the latest release at:"
         echo "https://github.com/${{ github.repository }}/releases/latest"
         echo ""
-        echo "File: WindowsCmdLauncher folder (with all DLLs)"
-        echo "Size: ~50-80 MB (includes PyQt5 and dependencies)"
-        echo ""
-        echo "Important: Keep all files in the folder together!"
+        echo "File: WindowsCmdLauncher.exe"
+        echo "Size: ~30-40 MB (includes PyQt5)"
         echo ""
         echo "=========================================="
       shell: powershell
