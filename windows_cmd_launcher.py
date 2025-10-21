@@ -109,8 +109,10 @@ COMMANDS = {
     ],
     "其他工具": [
         {"cmd": "regedit", "name": "注册表编辑器", "desc": "编辑注册表"},
-        {"cmd": "cmd", "name": "命令提示符", "desc": "传统命令行"},
-        {"cmd": "powershell", "name": "PowerShell", "desc": "高级命令行"},
+        {"cmd": "cmd", "name": "命令提示符", "desc": "传统命令行", "special": "cmd"},
+        {"cmd": "powershell", "name": "PowerShell", "desc": "高级命令行", "special": "powershell"},
+        {"cmd": "cmd_admin", "name": "命令提示符(管理员)", "desc": "管理员权限CMD", "special": "cmd_admin"},
+        {"cmd": "powershell_admin", "name": "PowerShell(管理员)", "desc": "管理员权限PS", "special": "powershell_admin"},
         {"cmd": "taskmgr", "name": "任务管理器", "desc": "查看进程"},
         {"cmd": "resmon", "name": "资源监视器", "desc": "资源使用情况"},
         {"cmd": "cleanmgr", "name": "磁盘清理", "desc": "清理临时文件"},
@@ -272,8 +274,15 @@ class CommandLauncher(QMainWindow):
                 row = idx // grid_columns
                 col = idx % grid_columns
                 
+                # 创建容器widget来放置按钮和说明
+                container = QWidget()
+                container_layout = QVBoxLayout()
+                container_layout.setContentsMargins(0, 0, 0, 0)
+                container_layout.setSpacing(2)
+                container.setLayout(container_layout)
+                
                 button = QPushButton(cmd_info["name"])
-                button.setFixedSize(button_width, button_height)
+                button.setFixedHeight(button_height)
                 button.setToolTip(f"{cmd_info['desc']}\n命令: {cmd_info['cmd']}")
                 button.setStyleSheet(f"""
                     QPushButton {{
@@ -293,19 +302,49 @@ class CommandLauncher(QMainWindow):
                         background-color: #4d4d4d;
                     }}
                 """)
-                button.clicked.connect(lambda checked, cmd=cmd_info["cmd"]: self.run_command(cmd))
+                button.clicked.connect(lambda checked, info=cmd_info: self.run_command(info))
                 
-                grid_layout.addWidget(button, row, col)
+                # 添加说明文字
+                desc_label = QLabel(cmd_info['desc'])
+                desc_label.setStyleSheet("color: #808080; font-size: 10px;")
+                desc_label.setAlignment(Qt.AlignCenter)
+                desc_label.setWordWrap(True)
+                desc_label.setMaximumHeight(30)
+                
+                container_layout.addWidget(button)
+                container_layout.addWidget(desc_label)
+                container.setFixedWidth(button_width)
+                
+                grid_layout.addWidget(container, row, col)
             
             self.content_layout.addLayout(grid_layout)
         
         self.content_layout.addStretch()
     
-    def run_command(self, command):
+    def run_command(self, cmd_info):
         try:
-            subprocess.Popen(command, shell=True)
+            command = cmd_info["cmd"]
+            special = cmd_info.get("special", None)
+            
+            if special == "cmd":
+                # 普通CMD
+                subprocess.Popen(["cmd.exe", "/k"], creationflags=subprocess.CREATE_NEW_CONSOLE)
+            elif special == "powershell":
+                # 普通PowerShell
+                subprocess.Popen(["powershell.exe", "-NoExit"], creationflags=subprocess.CREATE_NEW_CONSOLE)
+            elif special == "cmd_admin":
+                # 管理员CMD
+                import ctypes
+                ctypes.windll.shell32.ShellExecuteW(None, "runas", "cmd.exe", "/k", None, 1)
+            elif special == "powershell_admin":
+                # 管理员PowerShell
+                import ctypes
+                ctypes.windll.shell32.ShellExecuteW(None, "runas", "powershell.exe", "-NoExit", None, 1)
+            else:
+                # 普通命令
+                subprocess.Popen(command, shell=True)
         except Exception as e:
-            QMessageBox.warning(self, "错误", f"无法运行命令：{command}\n\n错误：{str(e)}")
+            QMessageBox.warning(self, "错误", f"无法运行命令：{cmd_info['name']}\n\n错误：{str(e)}")
     
     def open_settings(self):
         dialog = SettingsDialog(self)
