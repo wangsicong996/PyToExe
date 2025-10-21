@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 import sys
 import subprocess
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QGridLayout,
                               QPushButton, QVBoxLayout, QHBoxLayout, QLabel,
-                              QDialog, QSpinBox, QScrollArea, QFrame, QMessageBox)
+                              QDialog, QSpinBox, QScrollArea, QMessageBox)
 from PyQt5.QtCore import Qt, QSettings
-from PyQt5.QtGui import QFont, QIcon
+from PyQt5.QtGui import QFont
 
 # macOS Dark 样式
 MACOS_DARK_STYLE = """
@@ -302,7 +303,6 @@ class CommandLauncher(QMainWindow):
     
     def run_command(self, command):
         try:
-            # Try to run the command
             subprocess.Popen(command, shell=True)
         except Exception as e:
             QMessageBox.warning(self, "错误", f"无法运行命令：{command}\n\n错误：{str(e)}")
@@ -310,13 +310,11 @@ class CommandLauncher(QMainWindow):
     def open_settings(self):
         dialog = SettingsDialog(self)
         if dialog.exec_():
-            # Save settings
             self.settings.setValue("button_width", dialog.width_spin.value())
             self.settings.setValue("button_height", dialog.height_spin.value())
             self.settings.setValue("border_radius", dialog.radius_spin.value())
             self.settings.setValue("grid_columns", dialog.columns_spin.value())
             
-            # Rebuild grid
             self.build_command_grid()
             
             QMessageBox.information(self, "设置已保存", "设置已保存并应用！")
@@ -330,40 +328,6 @@ def main():
     window.show()
     
     sys.exit(app.exec_())
-
-
-if __name__ == '__main__':
-    main()
-, command):
-        try:
-            # Try to run the command
-            subprocess.Popen(command, shell=True)
-        except Exception as e:
-            QMessageBox.warning(self, "错误", f"无法运行命令：{command}\n\n错误：{str(e)}")
-    
-    def open_settings(self):
-        dialog = SettingsDialog(self)
-        if dialog.exec():
-            # Save settings
-            self.settings.setValue("button_width", dialog.width_spin.value())
-            self.settings.setValue("button_height", dialog.height_spin.value())
-            self.settings.setValue("border_radius", dialog.radius_spin.value())
-            self.settings.setValue("grid_columns", dialog.columns_spin.value())
-            
-            # Rebuild grid
-            self.build_command_grid()
-            
-            QMessageBox.information(self, "设置已保存", "设置已保存并应用！")
-
-
-def main():
-    app = QApplication(sys.argv)
-    app.setStyleSheet(MACOS_DARK_STYLE)
-    
-    window = CommandLauncher()
-    window.show()
-    
-    sys.exit(app.exec())
 
 
 if __name__ == '__main__':
