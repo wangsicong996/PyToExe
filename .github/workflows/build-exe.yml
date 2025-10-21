@@ -32,6 +32,7 @@ jobs:
       run: |
         echo "pyinstaller==6.3.0" > requirements.txt
         echo "PyQt6==6.6.1" >> requirements.txt
+        echo "PyQt6-sip==13.6.0" >> requirements.txt
         echo "chardet" >> requirements.txt
       shell: powershell
 
@@ -178,9 +179,11 @@ jobs:
             binaries=[],
             datas=[],
             hiddenimports=[
+                'PyQt6',
                 'PyQt6.QtCore',
                 'PyQt6.QtGui',
                 'PyQt6.QtWidgets',
+                'PyQt6.sip',
                 'pkgutil',
                 'importlib',
                 'importlib.metadata',
