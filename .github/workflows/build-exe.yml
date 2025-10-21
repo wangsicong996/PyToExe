@@ -232,8 +232,9 @@ jobs:
         # 检查构建是否成功
         if (Test-Path "dist/WindowsCmdLauncher.exe") {
           echo "Build successful!"
-          `$exe_size = (Get-Item "dist/WindowsCmdLauncher.exe").Length / 1MB
-          echo "EXE size: $([math]::Round(`$exe_size, 2)) MB"
+          $exe_size = (Get-Item "dist/WindowsCmdLauncher.exe").Length / 1MB
+          $rounded_size = [math]::Round($exe_size, 2)
+          echo "EXE size: $rounded_size MB"
         } else {
           echo "Build failed - EXE not found!"
           exit 1
