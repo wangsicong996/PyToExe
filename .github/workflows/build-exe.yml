@@ -1,4 +1,4 @@
-name: Build Windows Command Launcher to EXE
+name: Build Windows Command Launcher
 
 on:
   push:
@@ -7,11 +7,6 @@ on:
     paths:
       - 'windows_cmd_launcher.py'
   workflow_dispatch:
-    inputs:
-      branchRef:
-        description: 'Branch to deploy'
-        required: true
-        default: 'main'
 
 jobs:
   build:
@@ -20,14 +15,9 @@ jobs:
       contents: write
 
     steps:
-    # 1. Checkout代码
     - name: Checkout code
       uses: actions/checkout@v4
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        fetch-depth: 0
 
-    # 2. 创建requirements.txt
     - name: Create requirements.txt
       run: |
         echo "pyinstaller==6.3.0" > requirements.txt
@@ -35,60 +25,26 @@ jobs:
         echo "chardet" >> requirements.txt
       shell: powershell
 
-    # 3. 设置Python 3.11
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.11'
+        python-version: '3.10'
 
-    # 4. 验证Python版本
-    - name: Verify Python version
-      run: |
-        python --version
-        pip --version
-      shell: powershell
-
-    # 5. 缓存pip包
-    - name: Cache pip packages
-      uses: actions/cache@v3
-      with:
-        path: ~\AppData\Local\pip\Cache
-        key: ${{ runner.os }}-pip-pyqt5-${{ hashFiles('requirements.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-pyqt5-
-
-    # 6. 安装依赖
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
       shell: powershell
 
-    # 7. 缓存PyInstaller构建文件
-    - name: Cache PyInstaller build files
-      uses: actions/cache@v3
-      with:
-        path: |
-          build
-          dist
-        key: ${{ runner.os }}-pyinstaller-pyqt5-v2-${{ hashFiles('windows_cmd_launcher.py') }}
-        restore-keys: |
-          ${{ runner.os }}-pyinstaller-pyqt5-v2-
-
-    # 8. 设置PowerShell使用UTF-8
     - name: Configure PowerShell encoding
       run: |
         [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
         $PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
-        $PSDefaultParameterValues['*:Encoding'] = 'utf8'
       shell: powershell
 
-    # 9. 检查并修复文件编码
     - name: Check and fix file encoding
       run: |
         $script_path = "windows_cmd_launcher.py"
-        
-        echo "Checking encoding of Python script: $script_path"
         
         $encoding_script = @"
         import sys
@@ -101,36 +57,24 @@ jobs:
             
             result = chardet.detect(raw_data)
             encoding = result['encoding']
-            confidence = result['confidence']
             
-            print(f`"Detected encoding: {encoding} with confidence: {confidence}`")
-            
-            encodings_to_try = []
-            if encoding and confidence > 0.5:
-                encodings_to_try.append(encoding)
-            
-            for enc in ['utf-8', 'utf-16', 'gbk', 'gb2312', 'windows-1252', 'latin-1']:
-                if enc.lower() != encoding.lower() if encoding else True:
-                    encodings_to_try.append(enc)
+            encodings_to_try = ['utf-8', 'utf-16', 'gbk', 'gb2312', 'windows-1252', 'latin-1']
+            if encoding:
+                encodings_to_try.insert(0, encoding)
             
             content = None
             for enc in encodings_to_try:
                 try:
                     content = raw_data.decode(enc)
-                    print(f`"Successfully decoded with {enc}`")
                     break
-                except UnicodeDecodeError:
+                except:
                     continue
             
             if content is None:
                 content = raw_data.decode('utf-8', errors='ignore')
             
             lines = content.split('\n')
-            has_encoding = False
-            for line in lines[:2]:
-                if 'coding' in line and 'utf-8' in line.lower():
-                    has_encoding = True
-                    break
+            has_encoding = any('coding' in line and 'utf-8' in line.lower() for line in lines[:2])
             
             if not has_encoding:
                 if lines[0].startswith('#!'):
@@ -141,8 +85,6 @@ jobs:
             
             with open(file_path, 'w', encoding='utf-8') as file:
                 file.write(content)
-            
-            print(`"File saved with UTF-8 encoding`")
         
         if __name__ == '__main__':
             file_path = sys.argv[1] if len(sys.argv) > 1 else None
@@ -154,7 +96,6 @@ jobs:
         python fix_encoding.py "$script_path"
       shell: powershell
 
-    # 10. 创建PyInstaller spec文件
     - name: Create PyInstaller spec file
       run: |
         $spec_content = @"
@@ -219,160 +160,77 @@ jobs:
         $spec_content | Out-File -FilePath "windows_cmd_launcher.spec" -Encoding utf8
       shell: powershell
 
-    # 11. 使用PyInstaller构建EXE
     - name: Build EXE with PyInstaller
       run: |
-        echo "Building EXE with all dependencies included..."
-        
+        echo "Building EXE..."
         pyinstaller --clean --log-level INFO windows_cmd_launcher.spec
         
-        if (Test-Path "dist/WindowsCmdLauncher/WindowsCmdLauncher.exe") {
+        if (Test-Path "dist/WindowsCmdLauncher.exe") {
           echo "Build successful!"
-          $exe_size = (Get-Item "dist/WindowsCmdLauncher/WindowsCmdLauncher.exe").Length / 1MB
-          $rounded_size = [math]::Round($exe_size, 2)
-          echo "EXE size: $rounded_size MB"
-          
-          $folder_size = (Get-ChildItem "dist/WindowsCmdLauncher" -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB
-          $rounded_folder_size = [math]::Round($folder_size, 2)
-          echo "Total package size: $rounded_folder_size MB"
+          $exe_size = (Get-Item "dist/WindowsCmdLauncher.exe").Length / 1MB
+          echo "EXE size: $([math]::Round($exe_size, 2)) MB"
         } else {
-          echo "Build failed - EXE not found!"
+          echo "Build failed!"
           exit 1
         }
       shell: powershell
 
-    # 12. 创建发布信息
-    - name: Create release info
+    - name: Create README
       run: |
         $info = @"
-        Windows Command Launcher - Release Information
-        ================================================
+        Windows Command Launcher
+        =========================
         
         Build Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
-        Python Version: $(python --version)
-        PyQt5 Version: $(pip show PyQt5 | Select-String "Version")
-        PyInstaller Version: $(pip show pyinstaller | Select-String "Version")
-        
-        File Information:
-        - Executable: WindowsCmdLauncher.exe
-        - Type: Single file executable with all dependencies included
-        - No installation required
-        - Standalone application
         
         Features:
-        - Quick access to Windows management tools
-        - Categorized command buttons
-        - Customizable button size and layout
-        - macOS-style dark theme
-        - Grid layout with adjustable columns
+        - 35+ Windows management commands
+        - Dark theme UI
+        - Customizable layout
         
-        Supported Commands:
-        - System Management (9 commands)
-        - Network Management (4 commands)
-        - User & Security (4 commands)
-        - Group Policy (2 commands)
-        - Control Panel (8 commands)
-        - Other Tools (8 commands)
-        
-        Requirements:
-        - Windows 10/11
-        - No administrator privileges required for the launcher
-        - Some commands may require elevated permissions
-        
-        How to Use:
+        Usage:
         1. Run WindowsCmdLauncher.exe
-        2. Click any button to launch the corresponding Windows tool
-        3. Use Settings to customize button appearance
-        4. Hover over buttons to see command descriptions
-        
-        Customization:
-        - Button Width: 80-300px
-        - Button Height: 40-200px
-        - Border Radius: 0-30px
-        - Grid Columns: 2-10 columns per row
+        2. Click buttons to launch tools
+        3. Use Settings to customize
         "@
         
         $info | Out-File -FilePath "dist/README.txt" -Encoding utf8
-        echo "Release info created"
       shell: powershell
 
-    # 13. 上传EXE作为artifact
-    - name: Upload EXE as artifact
+    - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: Windows-Command-Launcher
+        name: WindowsCmdLauncher
         path: |
           dist/WindowsCmdLauncher.exe
           dist/README.txt
         retention-days: 90
 
-    # 14. 创建GitHub Release
     - name: Create Release
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      if: github.event_name == 'push'
       uses: softprops/action-gh-release@v1
       with:
         tag_name: v1.0.${{ github.run_number }}
-        name: Windows Command Launcher v1.0.${{ github.run_number }}
+        name: WindowsCmdLauncher v1.0.${{ github.run_number }}
         body: |
           ## Windows Command Launcher
           
-          自动构建的独立可执行文件，包含所有依赖（PyQt5）。
-          
-          ### 功能特性
-          - 🚀 快速启动Windows管理工具
-          - 📊 分类显示35+常用命令
-          - 🎨 macOS风格暗色主题
-          - ⚙️ 可自定义按钮大小和布局
-          - 🔍 悬停显示命令说明
-          - 💾 设置自动保存
-          
-          ### 命令分类
-          - **系统管理**: 计算机管理、设备管理器、磁盘管理等
-          - **网络管理**: 网络连接、防火墙设置等
-          - **用户安全**: 用户管理、安全策略等
-          - **组策略**: 策略编辑器等
-          - **控制面板**: 程序管理、系统属性等
-          - **其他工具**: 注册表、任务管理器等
+          自动构建，单文件 EXE，包含所有依赖。
           
           ### 使用方法
-          1. 下载 `WindowsCmdLauncher.exe`
-          2. 双击运行（部分命令可能需要管理员权限）
-          3. 点击按钮启动对应工具
-          4. 通过设置自定义界面
-          
-          ### 系统要求
-          - Windows 10/11
-          - 单文件，无需安装
-          - 约 30-40 MB
-          
-          构建时间: ${{ github.event.head_commit.timestamp }}
-          
-          ### 下载说明
-          - **WindowsCmdLauncher.exe**: 主程序
-          - **README.txt**: 详细说明文档
+          1. 下载 WindowsCmdLauncher.exe
+          2. 双击运行
+          3. 点击按钮启动 Windows 工具
         files: |
           dist/WindowsCmdLauncher.exe
           dist/README.txt
-        draft: false
-        prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    # 15. 显示下载链接
-    - name: Post download link
+    - name: Show download link
       run: |
         echo "=========================================="
-        echo "Build completed successfully!"
-        echo "=========================================="
-        echo ""
-        echo "Download your EXE from:"
-        echo "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-        echo ""
-        echo "Or check the latest release at:"
-        echo "https://github.com/${{ github.repository }}/releases/latest"
-        echo ""
-        echo "File: WindowsCmdLauncher.exe"
-        echo "Size: ~30-40 MB (includes PyQt5)"
-        echo ""
+        echo "Build completed!"
+        echo "Download: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
         echo "=========================================="
       shell: powershell
