@@ -496,17 +496,17 @@ class CommandLauncher(QMainWindow):
                 
                 # 名称
                 name_label = QLabel(cmd_info["name"])
-                name_label.setStyleSheet("color: #e0e0e0; font-size: 13px; font-weight: bold;")
+                name_label.setStyleSheet("color: #e0e0e0; font-size: 13px; font-weight: bold; background: transparent;")
                 name_label.setWordWrap(True)
                 
                 # 说明
                 desc_label = QLabel(cmd_info["desc"])
-                desc_label.setStyleSheet("color: #d4b975; font-size: 10px;")  # 黄色
+                desc_label.setStyleSheet("color: #d4b975; font-size: 10px; background: transparent;")  # 黄色
                 desc_label.setWordWrap(True)
                 
                 # 备注
                 note_label = QLabel()
-                note_label.setStyleSheet("color: #808080; font-size: 9px; font-style: italic;")
+                note_label.setStyleSheet("color: #808080; font-size: 9px; font-style: italic; background: transparent;")
                 note_label.setWordWrap(True)
                 if cmd_key in self.custom_data and "note" in self.custom_data[cmd_key]:
                     note_label.setText(self.custom_data[cmd_key]["note"])
