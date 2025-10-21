@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - 'windows_cmd_launcher.py'  # 只在这个文件改变时触发
+      - 'windows_cmd_launcher.py'
   workflow_dispatch:
     inputs:
       branchRef:
@@ -27,7 +27,7 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
         fetch-depth: 0
 
-    # 2. 创建requirements.txt，包含PyQt5和PyInstaller
+    # 2. 创建requirements.txt
     - name: Create requirements.txt
       run: |
         echo "pyinstaller==6.3.0" > requirements.txt
@@ -53,9 +53,9 @@ jobs:
       uses: actions/cache@v3
       with:
         path: ~\AppData\Local\pip\Cache
-        key: ${{ runner.os }}-pip-pyqt6-${{ hashFiles('requirements.txt') }}
+        key: ${{ runner.os }}-pip-pyqt5-${{ hashFiles('requirements.txt') }}
         restore-keys: |
-          ${{ runner.os }}-pip-pyqt6-
+          ${{ runner.os }}-pip-pyqt5-
 
     # 6. 安装依赖
     - name: Install dependencies
@@ -71,9 +71,9 @@ jobs:
         path: |
           build
           dist
-        key: ${{ runner.os }}-pyinstaller-pyqt6-${{ hashFiles('windows_cmd_launcher.py') }}
+        key: ${{ runner.os }}-pyinstaller-pyqt5-${{ hashFiles('windows_cmd_launcher.py') }}
         restore-keys: |
-          ${{ runner.os }}-pyinstaller-pyqt6-
+          ${{ runner.os }}-pyinstaller-pyqt5-
 
     # 8. 设置PowerShell使用UTF-8
     - name: Configure PowerShell encoding
@@ -90,7 +90,6 @@ jobs:
         
         echo "Checking encoding of Python script: $script_path"
         
-        # 创建编码修复脚本
         $encoding_script = @"
         import sys
         import os
@@ -164,7 +163,6 @@ jobs:
         from PyInstaller.building.api import PYZ, EXE, COLLECT
         from PyInstaller.building.build_main import Analysis
         
-        # 设置正确的编码
         if hasattr(sys.stdout, 'reconfigure'):
             sys.stdout.reconfigure(encoding='utf-8')
         if hasattr(sys.stderr, 'reconfigure'):
@@ -178,15 +176,10 @@ jobs:
             binaries=[],
             datas=[],
             hiddenimports=[
-                'PyQt6',
-                'PyQt6.QtCore',
-                'PyQt6.QtGui',
-                'PyQt6.QtWidgets',
-                'PyQt6.sip',
-                'pkgutil',
-                'importlib',
-                'importlib.metadata',
-                'subprocess',
+                'PyQt5',
+                'PyQt5.QtCore',
+                'PyQt5.QtGui',
+                'PyQt5.QtWidgets',
             ],
             hookspath=[],
             hooksconfig={},
@@ -234,22 +227,19 @@ jobs:
         $spec_content | Out-File -FilePath "windows_cmd_launcher.spec" -Encoding utf8
       shell: powershell
 
-    # 11. 使用PyInstaller构建EXE（目录模式，包含所有依赖）
+    # 11. 使用PyInstaller构建EXE
     - name: Build EXE with PyInstaller
       run: |
         echo "Building EXE with all dependencies included..."
         
-        # 使用spec文件构建
         pyinstaller --clean --log-level INFO windows_cmd_launcher.spec
         
-        # 检查构建是否成功
         if (Test-Path "dist/WindowsCmdLauncher/WindowsCmdLauncher.exe") {
           echo "Build successful!"
           $exe_size = (Get-Item "dist/WindowsCmdLauncher/WindowsCmdLauncher.exe").Length / 1MB
           $rounded_size = [math]::Round($exe_size, 2)
           echo "EXE size: $rounded_size MB"
           
-          # 计算整个文件夹大小
           $folder_size = (Get-ChildItem "dist/WindowsCmdLauncher" -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB
           $rounded_folder_size = [math]::Round($folder_size, 2)
           echo "Total package size: $rounded_folder_size MB"
@@ -268,7 +258,7 @@ jobs:
         
         Build Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
         Python Version: $(python --version)
-        PyQt6 Version: $(pip show PyQt6 | Select-String "Version")
+        PyQt5 Version: $(pip show PyQt5 | Select-String "Version")
         PyInstaller Version: $(pip show pyinstaller | Select-String "Version")
         
         File Information:
@@ -285,16 +275,16 @@ jobs:
         - Grid layout with adjustable columns
         
         Supported Commands:
-        - System Management (Computer Management, Device Manager, Disk Management, etc.)
-        - Network Management (Network Connections, Firewall, etc.)
-        - User & Security (User Management, Security Policy, etc.)
-        - Group Policy (Policy Editor, etc.)
-        - Control Panel (Programs, System Properties, Power Options, etc.)
-        - Other Tools (Registry Editor, Task Manager, Resource Monitor, etc.)
+        - System Management (9 commands)
+        - Network Management (4 commands)
+        - User & Security (4 commands)
+        - Group Policy (2 commands)
+        - Control Panel (8 commands)
+        - Other Tools (8 commands)
         
         Requirements:
         - Windows 10/11
-        - No administrator privileges required for the launcher itself
+        - No administrator privileges required for the launcher
         - Some commands may require elevated permissions
         
         How to Use:
@@ -326,7 +316,7 @@ jobs:
           dist/README.txt
         retention-days: 90
 
-    # 14. 创建GitHub Release（可选）
+    # 14. 创建GitHub Release
     - name: Create Release
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       uses: softprops/action-gh-release@v1
@@ -336,7 +326,7 @@ jobs:
         body: |
           ## Windows Command Launcher
           
-          自动构建的应用程序，包含所有依赖（PyQt6及DLL文件）。
+          自动构建的应用程序，包含所有依赖（PyQt5及DLL文件）。
           
           ### 功能特性
           - 🚀 快速启动Windows管理工具
@@ -357,14 +347,14 @@ jobs:
           ### 使用方法
           1. 下载并解压 `Windows-Command-Launcher.zip`
           2. 进入 `WindowsCmdLauncher` 文件夹
-          3. 双击运行 `WindowsCmdLauncher.exe`（部分命令可能需要管理员权限）
+          3. 双击运行 `WindowsCmdLauncher.exe`
           4. 点击按钮启动对应工具
           5. 通过设置自定义界面
           
           ### 系统要求
           - Windows 10/11
-          - 无需安装Python或PyQt6
-          - 文件夹约 80-100 MB（包含所有DLL）
+          - 无需安装Python或PyQt5
+          - 文件夹约 50-80 MB（包含所有DLL）
           
           ### 重要说明
           ⚠️ 请保持 `WindowsCmdLauncher` 文件夹中的所有文件完整，不要单独移动exe文件！
@@ -372,7 +362,7 @@ jobs:
           构建时间: ${{ github.event.head_commit.timestamp }}
           
           ### 下载说明
-          - **WindowsCmdLauncher文件夹**: 完整应用程序（包含所有依赖）
+          - **WindowsCmdLauncher文件夹**: 完整应用程序
           - **README.txt**: 详细说明文档
         files: |
           dist/WindowsCmdLauncher/**/*
@@ -396,7 +386,7 @@ jobs:
         echo "https://github.com/${{ github.repository }}/releases/latest"
         echo ""
         echo "File: WindowsCmdLauncher folder (with all DLLs)"
-        echo "Size: ~80-100 MB (includes PyQt6 and dependencies)"
+        echo "Size: ~50-80 MB (includes PyQt5 and dependencies)"
         echo ""
         echo "Important: Keep all files in the folder together!"
         echo ""
