@@ -1,11 +1,11 @@
-name: Build VirtioFS Mount GUI to EXE
+name: Build Windows Command Launcher to EXE
 
 on:
   push:
     branches:
       - main
     paths:
-      - 'virtiofs_mount_gui.py'  # 只在这个文件改变时触发
+      - 'windows_cmd_launcher.py'  # 只在这个文件改变时触发
   workflow_dispatch:
     inputs:
       branchRef:
@@ -27,19 +27,19 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
         fetch-depth: 0
 
-    # 2. 创建requirements.txt，包含PyQt5和PyInstaller
+    # 2. 创建requirements.txt，包含PyQt6和PyInstaller
     - name: Create requirements.txt
       run: |
         echo "pyinstaller==6.3.0" > requirements.txt
-        echo "PyQt5==5.15.10" >> requirements.txt
+        echo "PyQt6==6.6.1" >> requirements.txt
         echo "chardet" >> requirements.txt
       shell: powershell
 
-    # 3. 设置Python 3.10
+    # 3. 设置Python 3.11
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.10'
+        python-version: '3.11'
 
     # 4. 验证Python版本
     - name: Verify Python version
@@ -53,9 +53,9 @@ jobs:
       uses: actions/cache@v3
       with:
         path: ~\AppData\Local\pip\Cache
-        key: ${{ runner.os }}-pip-pyqt5-${{ hashFiles('requirements.txt') }}
+        key: ${{ runner.os }}-pip-pyqt6-${{ hashFiles('requirements.txt') }}
         restore-keys: |
-          ${{ runner.os }}-pip-pyqt5-
+          ${{ runner.os }}-pip-pyqt6-
 
     # 6. 安装依赖
     - name: Install dependencies
@@ -71,9 +71,9 @@ jobs:
         path: |
           build
           dist
-        key: ${{ runner.os }}-pyinstaller-pyqt5-${{ hashFiles('virtiofs_mount_gui.py') }}
+        key: ${{ runner.os }}-pyinstaller-pyqt6-${{ hashFiles('windows_cmd_launcher.py') }}
         restore-keys: |
-          ${{ runner.os }}-pyinstaller-pyqt5-
+          ${{ runner.os }}-pyinstaller-pyqt6-
 
     # 8. 设置PowerShell使用UTF-8
     - name: Configure PowerShell encoding
@@ -86,7 +86,7 @@ jobs:
     # 9. 检查并修复文件编码
     - name: Check and fix file encoding
       run: |
-        $script_path = "virtiofs_mount_gui.py"
+        $script_path = "windows_cmd_launcher.py"
         
         echo "Checking encoding of Python script: $script_path"
         
@@ -104,7 +104,7 @@ jobs:
             encoding = result['encoding']
             confidence = result['confidence']
             
-            print(f"Detected encoding: {encoding} with confidence: {confidence}")
+            print(f`"Detected encoding: {encoding} with confidence: {confidence}`")
             
             encodings_to_try = []
             if encoding and confidence > 0.5:
@@ -118,7 +118,7 @@ jobs:
             for enc in encodings_to_try:
                 try:
                     content = raw_data.decode(enc)
-                    print(f"Successfully decoded with {enc}")
+                    print(f`"Successfully decoded with {enc}`")
                     break
                 except UnicodeDecodeError:
                     continue
@@ -143,7 +143,7 @@ jobs:
             with open(file_path, 'w', encoding='utf-8') as file:
                 file.write(content)
             
-            print("File saved with UTF-8 encoding")
+            print(`"File saved with UTF-8 encoding`")
         
         if __name__ == '__main__':
             file_path = sys.argv[1] if len(sys.argv) > 1 else None
@@ -173,14 +173,14 @@ jobs:
         block_cipher = None
         
         a = Analysis(
-            ['virtiofs_mount_gui.py'],
+            ['windows_cmd_launcher.py'],
             pathex=[],
             binaries=[],
             datas=[],
             hiddenimports=[
-                'PyQt5.QtCore',
-                'PyQt5.QtGui',
-                'PyQt5.QtWidgets',
+                'PyQt6.QtCore',
+                'PyQt6.QtGui',
+                'PyQt6.QtWidgets',
             ],
             hookspath=[],
             hooksconfig={},
@@ -201,24 +201,24 @@ jobs:
             a.zipfiles,
             a.datas,
             [],
-            name='VirtioFS_Mount_Manager',
+            name='WindowsCmdLauncher',
             debug=False,
             bootloader_ignore_signals=False,
             strip=False,
             upx=True,
             upx_exclude=[],
             runtime_tmpdir=None,
-            console=False,  # 设置为False可以隐藏控制台窗口
+            console=False,
             disable_windowed_traceback=False,
             argv_emulation=False,
             target_arch=None,
             codesign_identity=None,
             entitlements_file=None,
-            icon=None,  # 如果有icon文件，可以在这里指定
+            icon=None,
         )
         "@
         
-        $spec_content | Out-File -FilePath "virtiofs_mount_gui.spec" -Encoding utf8
+        $spec_content | Out-File -FilePath "windows_cmd_launcher.spec" -Encoding utf8
       shell: powershell
 
     # 11. 使用PyInstaller构建EXE（单文件模式，包含所有依赖）
@@ -227,13 +227,13 @@ jobs:
         echo "Building EXE with all dependencies included..."
         
         # 使用spec文件构建
-        pyinstaller --clean --log-level INFO virtiofs_mount_gui.spec
+        pyinstaller --clean --log-level INFO windows_cmd_launcher.spec
         
         # 检查构建是否成功
-        if (Test-Path "dist/VirtioFS_Mount_Manager.exe") {
+        if (Test-Path "dist/WindowsCmdLauncher.exe") {
           echo "Build successful!"
-          $exe_size = (Get-Item "dist/VirtioFS_Mount_Manager.exe").Length / 1MB
-          echo "EXE size: $([math]::Round($exe_size, 2)) MB"
+          `$exe_size = (Get-Item "dist/WindowsCmdLauncher.exe").Length / 1MB
+          echo "EXE size: $([math]::Round(`$exe_size, 2)) MB"
         } else {
           echo "Build failed - EXE not found!"
           exit 1
@@ -244,34 +244,51 @@ jobs:
     - name: Create release info
       run: |
         $info = @"
-        VirtioFS Mount Manager - Release Information
-        ============================================
+        Windows Command Launcher - Release Information
+        ================================================
         
         Build Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
         Python Version: $(python --version)
-        PyQt5 Version: $(pip show PyQt5 | Select-String "Version")
+        PyQt6 Version: $(pip show PyQt6 | Select-String "Version")
         PyInstaller Version: $(pip show pyinstaller | Select-String "Version")
         
         File Information:
-        - Executable: VirtioFS_Mount_Manager.exe
+        - Executable: WindowsCmdLauncher.exe
         - Type: Single file executable with all dependencies included
         - No installation required
+        - Standalone application
         
-        Supported VMs:
-        - vm888 (X:)
-        - vm555 (Y:)
-        - vm666 (J:)
-        - vm777 (K:)
+        Features:
+        - Quick access to Windows management tools
+        - Categorized command buttons
+        - Customizable button size and layout
+        - macOS-style dark theme
+        - Grid layout with adjustable columns
+        
+        Supported Commands:
+        - System Management (Computer Management, Device Manager, Disk Management, etc.)
+        - Network Management (Network Connections, Firewall, etc.)
+        - User & Security (User Management, Security Policy, etc.)
+        - Group Policy (Policy Editor, etc.)
+        - Control Panel (Programs, System Properties, Power Options, etc.)
+        - Other Tools (Registry Editor, Task Manager, Resource Monitor, etc.)
         
         Requirements:
-        - Windows OS
-        - Administrator privileges
-        - VirtioFS installed at: C:\Program Files\Virtio-Win\VioFS\virtiofs.exe
+        - Windows 10/11
+        - No administrator privileges required for the launcher itself
+        - Some commands may require elevated permissions
         
         How to Use:
-        1. Run the executable as Administrator
-        2. Click the corresponding button to mount a VM
-        3. Check the log for operation status
+        1. Run WindowsCmdLauncher.exe
+        2. Click any button to launch the corresponding Windows tool
+        3. Use Settings to customize button appearance
+        4. Hover over buttons to see command descriptions
+        
+        Customization:
+        - Button Width: 80-300px
+        - Button Height: 40-200px
+        - Border Radius: 0-30px
+        - Grid Columns: 2-10 columns per row
         "@
         
         $info | Out-File -FilePath "dist/README.txt" -Encoding utf8
@@ -282,9 +299,9 @@ jobs:
     - name: Upload EXE as artifact
       uses: actions/upload-artifact@v4
       with:
-        name: VirtioFS-Mount-Manager
+        name: Windows-Command-Launcher
         path: |
-          dist/VirtioFS_Mount_Manager.exe
+          dist/WindowsCmdLauncher.exe
           dist/README.txt
         retention-days: 90
 
@@ -294,30 +311,46 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         tag_name: v1.0.${{ github.run_number }}
-        name: VirtioFS Mount Manager v1.0.${{ github.run_number }}
+        name: Windows Command Launcher v1.0.${{ github.run_number }}
         body: |
-          ## VirtioFS Mount Manager
+          ## Windows Command Launcher
           
-          自动构建的独立可执行文件，包含所有依赖。
+          自动构建的独立可执行文件，包含所有依赖（PyQt6）。
           
           ### 功能特性
-          - 一键挂载多个VirtioFS驱动器
-          - 图形化界面，易于使用
-          - 管理员权限自动检测
-          - 实时操作日志显示
+          - 🚀 快速启动Windows管理工具
+          - 📊 分类显示35+常用命令
+          - 🎨 macOS风格暗色主题
+          - ⚙️ 可自定义按钮大小和布局
+          - 🔍 悬停显示命令说明
+          - 💾 设置自动保存
+          
+          ### 命令分类
+          - **系统管理**: 计算机管理、设备管理器、磁盘管理等
+          - **网络管理**: 网络连接、防火墙设置等
+          - **用户安全**: 用户管理、安全策略等
+          - **组策略**: 策略编辑器等
+          - **控制面板**: 程序管理、系统属性等
+          - **其他工具**: 注册表、任务管理器等
           
           ### 使用方法
-          1. 下载 `VirtioFS_Mount_Manager.exe`
-          2. 右键选择"以管理员身份运行"
-          3. 点击对应按钮挂载虚拟机
+          1. 下载 `WindowsCmdLauncher.exe`
+          2. 双击运行（部分命令可能需要管理员权限）
+          3. 点击按钮启动对应工具
+          4. 通过设置自定义界面
           
           ### 系统要求
-          - Windows 操作系统
-          - 已安装 VirtioFS 驱动
+          - Windows 10/11
+          - 单文件，无需安装
+          - 约 30-40 MB
           
           构建时间: ${{ github.event.head_commit.timestamp }}
+          
+          ### 下载说明
+          - **WindowsCmdLauncher.exe**: 主程序
+          - **README.txt**: 详细说明文档
         files: |
-          dist/VirtioFS_Mount_Manager.exe
+          dist/WindowsCmdLauncher.exe
           dist/README.txt
         draft: false
         prerelease: false
@@ -336,6 +369,9 @@ jobs:
         echo ""
         echo "Or check the latest release at:"
         echo "https://github.com/${{ github.repository }}/releases/latest"
+        echo ""
+        echo "File: WindowsCmdLauncher.exe"
+        echo "Size: ~30-40 MB (includes PyQt6)"
         echo ""
         echo "=========================================="
       shell: powershell
