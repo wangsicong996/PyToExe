@@ -195,11 +195,11 @@ from PyQt5.QtCore import QBuffer
 
 class NoteDialog(QDialog):
     """备注和图片编辑对话框"""
-    def __init__(self, cmd_info, current_note="", current_image=None, parent=None):
+    def __init__(self, cmd_info, current_note="", current_image=None, current_color=None, parent=None):
         super().__init__(parent)
         self.setWindowTitle(f"编辑备注 - {cmd_info['name']}")
         self.setModal(True)
-        self.setFixedSize(500, 500)
+        self.setFixedSize(500, 600)
         
         layout = QVBoxLayout()
         layout.setContentsMargins(20, 20, 20, 20)
@@ -215,6 +215,30 @@ class NoteDialog(QDialog):
         
         layout.addWidget(note_label)
         layout.addWidget(self.note_input)
+        
+        # 背景色选择
+        color_label = QLabel("按钮背景色：")
+        color_layout = QHBoxLayout()
+        
+        self.current_color = current_color if current_color else "#2d2d2d"
+        self.color_preview = QLabel()
+        self.color_preview.setFixedSize(100, 30)
+        self.color_preview.setStyleSheet(f"background-color: {self.current_color}; border: 1px solid #3d3d3d; border-radius: 4px;")
+        
+        color_button = QPushButton("选择颜色")
+        color_button.clicked.connect(self.choose_color)
+        
+        reset_color_button = QPushButton("重置")
+        reset_color_button.setObjectName("cancelButton")
+        reset_color_button.clicked.connect(lambda: self.set_color("#2d2d2d"))
+        
+        color_layout.addWidget(self.color_preview)
+        color_layout.addWidget(color_button)
+        color_layout.addWidget(reset_color_button)
+        color_layout.addStretch()
+        
+        layout.addWidget(color_label)
+        layout.addLayout(color_layout)
         
         # 图片区域
         image_label = QLabel("缩略图：")
@@ -251,6 +275,18 @@ class NoteDialog(QDialog):
         button_layout.addWidget(save_button)
         layout.addLayout(button_layout)
     
+    def choose_color(self):
+        """选择颜色"""
+        from PyQt5.QtWidgets import QColorDialog
+        color = QColorDialog.getColor()
+        if color.isValid():
+            self.set_color(color.name())
+    
+    def set_color(self, color):
+        """设置颜色"""
+        self.current_color = color
+        self.color_preview.setStyleSheet(f"background-color: {color}; border: 1px solid #3d3d3d; border-radius: 4px;")
+    
     def clear_image(self):
         """清除图片"""
         self.image_area.clear()
@@ -262,6 +298,9 @@ class NoteDialog(QDialog):
     
     def get_image(self):
         return self.image_area.get_image_data()
+    
+    def get_color(self):
+        return self.current_color
 
 
 class SettingsDialog(QDialog):
@@ -269,7 +308,7 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("设置")
         self.setModal(True)
-        self.setFixedSize(450, 400)
+        self.setFixedSize(450, 500)
         
         layout = QVBoxLayout()
         layout.setContentsMargins(20, 20, 20, 20)
@@ -327,6 +366,30 @@ class SettingsDialog(QDialog):
         columns_layout.addWidget(self.columns_spin)
         columns_layout.addStretch()
         layout.addLayout(columns_layout)
+        
+        # Description font size
+        desc_size_layout = QHBoxLayout()
+        desc_size_label = QLabel("说明文字大小：")
+        self.desc_size_spin = QSpinBox()
+        self.desc_size_spin.setRange(6, 20)
+        self.desc_size_spin.setValue(parent.settings.value("desc_font_size", 10, int))
+        self.desc_size_spin.setSuffix(" px")
+        desc_size_layout.addWidget(desc_size_label)
+        desc_size_layout.addWidget(self.desc_size_spin)
+        desc_size_layout.addStretch()
+        layout.addLayout(desc_size_layout)
+        
+        # Note font size
+        note_size_layout = QHBoxLayout()
+        note_size_label = QLabel("备注文字大小：")
+        self.note_size_spin = QSpinBox()
+        self.note_size_spin.setRange(6, 20)
+        self.note_size_spin.setValue(parent.settings.value("note_font_size", 9, int))
+        self.note_size_spin.setSuffix(" px")
+        note_size_layout.addWidget(note_size_label)
+        note_size_layout.addWidget(self.note_size_spin)
+        note_size_layout.addStretch()
+        layout.addLayout(note_size_layout)
         
         layout.addStretch()
         
@@ -433,6 +496,8 @@ class CommandLauncher(QMainWindow):
         button_height = self.settings.value("button_height", 100, int)
         border_radius = self.settings.value("border_radius", 8, int)
         grid_columns = self.settings.value("grid_columns", 10, int)
+        desc_font_size = self.settings.value("desc_font_size", 10, int)
+        note_font_size = self.settings.value("note_font_size", 9, int)
         
         # Build sections
         for category, commands in COMMANDS.items():
@@ -501,12 +566,12 @@ class CommandLauncher(QMainWindow):
                 
                 # 说明
                 desc_label = QLabel(cmd_info["desc"])
-                desc_label.setStyleSheet("color: #d4b975; font-size: 10px; background: transparent;")  # 黄色
+                desc_label.setStyleSheet(f"color: #d4b975; font-size: {desc_font_size}px; background: transparent;")  # 黄色
                 desc_label.setWordWrap(True)
                 
                 # 备注
                 note_label = QLabel()
-                note_label.setStyleSheet("color: #808080; font-size: 9px; font-style: italic; background: transparent;")
+                note_label.setStyleSheet(f"color: #808080; font-size: {note_font_size}px; font-style: italic; background: transparent;")
                 note_label.setWordWrap(True)
                 if cmd_key in self.custom_data and "note" in self.custom_data[cmd_key]:
                     note_label.setText(self.custom_data[cmd_key]["note"])
@@ -521,18 +586,26 @@ class CommandLauncher(QMainWindow):
                 btn_layout.addLayout(text_layout, 1)
                 
                 button.setLayout(btn_layout)
+                
+                # 获取自定义背景色
+                bg_color = "#2d2d2d"
+                if cmd_key in self.custom_data and "color" in self.custom_data[cmd_key]:
+                    bg_color = self.custom_data[cmd_key]["color"]
+                
                 button.setStyleSheet(f"""
                     QPushButton {{
-                        background-color: #2d2d2d;
+                        background-color: {bg_color};
                         border: 1px solid #3d3d3d;
                         border-radius: {border_radius}px;
                     }}
                     QPushButton:hover {{
-                        background-color: #3d3d3d;
+                        background-color: {bg_color};
                         border: 1px solid #0a84ff;
+                        filter: brightness(1.2);
                     }}
                     QPushButton:pressed {{
-                        background-color: #4d4d4d;
+                        background-color: {bg_color};
+                        filter: brightness(0.8);
                     }}
                 """)
                 
@@ -559,21 +632,25 @@ class CommandLauncher(QMainWindow):
         cmd_key = cmd_info["cmd"]
         current_note = ""
         current_image = None
+        current_color = None
         
         if cmd_key in self.custom_data:
             current_note = self.custom_data[cmd_key].get("note", "")
             current_image = self.custom_data[cmd_key].get("image", None)
+            current_color = self.custom_data[cmd_key].get("color", None)
         
-        dialog = NoteDialog(cmd_info, current_note, current_image, self)
+        dialog = NoteDialog(cmd_info, current_note, current_image, current_color, self)
         if dialog.exec_():
             note = dialog.get_note()
             image = dialog.get_image()
+            color = dialog.get_color()
             
             if cmd_key not in self.custom_data:
                 self.custom_data[cmd_key] = {}
             
             self.custom_data[cmd_key]["note"] = note
             self.custom_data[cmd_key]["image"] = image
+            self.custom_data[cmd_key]["color"] = color
             
             self.save_custom_data()
             self.build_command_grid()
@@ -606,6 +683,8 @@ class CommandLauncher(QMainWindow):
             self.settings.setValue("button_height", dialog.button_height_spin.value())
             self.settings.setValue("border_radius", dialog.radius_spin.value())
             self.settings.setValue("grid_columns", dialog.columns_spin.value())
+            self.settings.setValue("desc_font_size", dialog.desc_size_spin.value())
+            self.settings.setValue("note_font_size", dialog.note_size_spin.value())
             
             self.build_command_grid()
             
