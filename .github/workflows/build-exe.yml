@@ -71,9 +71,9 @@ jobs:
         path: |
           build
           dist
-        key: ${{ runner.os }}-pyinstaller-pyqt5-${{ hashFiles('windows_cmd_launcher.py') }}
+        key: ${{ runner.os }}-pyinstaller-pyqt5-v2-${{ hashFiles('windows_cmd_launcher.py') }}
         restore-keys: |
-          ${{ runner.os }}-pyinstaller-pyqt5-
+          ${{ runner.os }}-pyinstaller-pyqt5-v2-
 
     # 8. 设置PowerShell使用UTF-8
     - name: Configure PowerShell encoding
