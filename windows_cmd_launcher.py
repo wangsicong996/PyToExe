@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 import sys
 import subprocess
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QGridLayout,
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QGridLayout,
                               QPushButton, QVBoxLayout, QHBoxLayout, QLabel,
                               QDialog, QSpinBox, QScrollArea, QFrame, QMessageBox)
-from PyQt6.QtCore import Qt, QSettings
-from PyQt6.QtGui import QFont, QIcon
+from PyQt5.QtCore import Qt, QSettings
+from PyQt5.QtGui import QFont, QIcon
 
 # macOS Dark 样式
 MACOS_DARK_STYLE = """
@@ -211,7 +211,7 @@ class CommandLauncher(QMainWindow):
         # Title bar
         title_layout = QHBoxLayout()
         title_label = QLabel("Windows 命令快捷启动器")
-        title_label.setFont(QFont("Arial", 18, QFont.Weight.Bold))
+        title_label.setFont(QFont("Arial", 18, QFont.Bold))
         settings_button = QPushButton("⚙ 设置")
         settings_button.setObjectName("settingsButton")
         settings_button.setFixedSize(100, 35)
@@ -225,13 +225,13 @@ class CommandLauncher(QMainWindow):
         # Scroll area
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         
         # Content widget
         self.content_widget = QWidget()
         self.content_layout = QVBoxLayout()
-        self.content_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        self.content_layout.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         self.content_layout.setSpacing(20)
         self.content_widget.setLayout(self.content_layout)
         
@@ -258,14 +258,14 @@ class CommandLauncher(QMainWindow):
         for category, commands in COMMANDS.items():
             # Category label
             category_label = QLabel(category)
-            category_label.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+            category_label.setFont(QFont("Arial", 14, QFont.Bold))
             category_label.setStyleSheet("color: #0a84ff; margin-top: 10px;")
             self.content_layout.addWidget(category_label)
             
             # Grid layout for buttons
             grid_layout = QGridLayout()
             grid_layout.setSpacing(10)
-            grid_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+            grid_layout.setAlignment(Qt.AlignTop | Qt.AlignLeft)
             
             for idx, cmd_info in enumerate(commands):
                 row = idx // grid_columns
@@ -301,6 +301,40 @@ class CommandLauncher(QMainWindow):
         self.content_layout.addStretch()
     
     def run_command(self, command):
+        try:
+            # Try to run the command
+            subprocess.Popen(command, shell=True)
+        except Exception as e:
+            QMessageBox.warning(self, "错误", f"无法运行命令：{command}\n\n错误：{str(e)}")
+    
+    def open_settings(self):
+        dialog = SettingsDialog(self)
+        if dialog.exec_():
+            # Save settings
+            self.settings.setValue("button_width", dialog.width_spin.value())
+            self.settings.setValue("button_height", dialog.height_spin.value())
+            self.settings.setValue("border_radius", dialog.radius_spin.value())
+            self.settings.setValue("grid_columns", dialog.columns_spin.value())
+            
+            # Rebuild grid
+            self.build_command_grid()
+            
+            QMessageBox.information(self, "设置已保存", "设置已保存并应用！")
+
+
+def main():
+    app = QApplication(sys.argv)
+    app.setStyleSheet(MACOS_DARK_STYLE)
+    
+    window = CommandLauncher()
+    window.show()
+    
+    sys.exit(app.exec_())
+
+
+if __name__ == '__main__':
+    main()
+, command):
         try:
             # Try to run the command
             subprocess.Popen(command, shell=True)
