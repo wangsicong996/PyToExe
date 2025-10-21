@@ -27,12 +27,11 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
         fetch-depth: 0
 
-    # 2. 创建requirements.txt，包含PyQt6和PyInstaller
+    # 2. 创建requirements.txt，包含PyQt5和PyInstaller
     - name: Create requirements.txt
       run: |
         echo "pyinstaller==6.3.0" > requirements.txt
-        echo "PyQt6==6.6.1" >> requirements.txt
-        echo "PyQt6-sip==13.6.0" >> requirements.txt
+        echo "PyQt5==5.15.10" >> requirements.txt
         echo "chardet" >> requirements.txt
       shell: powershell
 
